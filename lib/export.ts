@@ -1,120 +1,371 @@
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
-// Exportar para PDF
-export async function exportToPDF(book: any, elementId: string = 'book-content') {
-  try {
-    const element = document.getElementById(elementId);
-    if (!element) {
-      throw new Error('Elemento não encontrado para exportação');
-    }
+// Função para gerar HTML otimizado para PDF
+function generateBookHTML(book: any): string {
+  const currentDate = new Date().toLocaleDateString('pt-BR');
+  const totalChapters = book.content.chapters.length;
+  
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        body {
+          font-family: 'Georgia', 'Times New Roman', serif;
+          line-height: 1.8;
+          color: #333;
+          max-width: 800px;
+          margin: 0 auto;
+          padding: 40px 20px;
+          background: #fff;
+        }
+        
+        .cover {
+          text-align: center;
+          padding: 80px 20px;
+          border-bottom: 3px double #2c5aa0;
+          margin-bottom: 40px;
+        }
+        
+        .cover h1 {
+          font-size: 2.5em;
+          color: #2c5aa0;
+          margin-bottom: 20px;
+          font-weight: bold;
+          line-height: 1.3;
+        }
+        
+        .cover .subtitle {
+          font-size: 1.2em;
+          color: #666;
+          font-style: italic;
+          margin-bottom: 30px;
+        }
+        
+        .cover .meta {
+          font-size: 0.9em;
+          color: #888;
+          margin-top: 40px;
+        }
+        
+        .synopsis {
+          background: #f8f9fa;
+          padding: 30px;
+          border-radius: 8px;
+          border-left: 4px solid #2c5aa0;
+          margin: 40px 0;
+        }
+        
+        .synopsis h2 {
+          color: #2c5aa0;
+          margin-bottom: 15px;
+          font-size: 1.5em;
+        }
+        
+        .chapter {
+          margin: 50px 0;
+          page-break-inside: avoid;
+        }
+        
+        .chapter h2 {
+          color: #2c5aa0;
+          border-bottom: 2px solid #2c5aa0;
+          padding-bottom: 10px;
+          margin-bottom: 25px;
+          font-size: 1.4em;
+        }
+        
+        .chapter-content {
+          text-align: justify;
+          font-size: 1.1em;
+        }
+        
+        .chapter-content p {
+          margin-bottom: 1.2em;
+          text-indent: 2em;
+        }
+        
+        .footer {
+          margin-top: 60px;
+          padding-top: 20px;
+          border-top: 1px solid #ddd;
+          text-align: center;
+          color: #666;
+          font-size: 0.9em;
+        }
+        
+        .page-break {
+          page-break-before: always;
+        }
+        
+        @media print {
+          body { padding: 20px; }
+          .cover { padding: 60px 20px; }
+          .page-break { display: block; }
+        }
+      </style>
+    </head>
+    <body>
+      <!-- Capa -->
+      <div class="cover">
+        <h1>${book.content.title}</h1>
+        <div class="subtitle">Uma história gerada por inteligência artificial</div>
+        <div class="meta">
+          <div>Gênero: ${book.config.genre}</div>
+          <div>Público: ${book.config.audience}</div>
+          <div>Data: ${currentDate}</div>
+          <div>Capítulos: ${totalChapters}</div>
+        </div>
+      </div>
+      
+      <!-- Sinopse -->
+      <div class="synopsis">
+        <h2>📖 Sinopse</h2>
+        <div class="chapter-content">
+          ${book.content.synopsis.split('\n').map(paragraph => 
+            `<p>${paragraph.trim()}</p>`
+          ).join('')}
+        </div>
+      </div>
+      
+      <!-- Descrição Original -->
+      <div class="synopsis" style="background: #fff3cd; border-left-color: #ffc107;">
+        <h2>🎯 Descrição Original</h2>
+        <p><em>"${book.description}"</em></p>
+      </div>
+      
+      <!-- Capítulos -->
+      <div style="page-break-before: always;"></div>
+      
+      <div style="text-align: center; margin: 40px 0;">
+        <h2 style="color: #2c5aa0; border: none;">📚 Capítulos</h2>
+      </div>
+      
+      ${book.content.chapters.map((chapter: any, index: number) => `
+        <div class="chapter ${index > 0 ? 'page-break' : ''}">
+          <h2>${chapter.title}</h2>
+          <div class="chapter-content">
+            ${chapter.content.split('\n\n').map(paragraph => 
+              paragraph.trim() ? `<p>${paragraph.trim()}</p>` : ''
+            ).join('')}
+          </div>
+        </div>
+      `).join('')}
+      
+      <!-- Rodapé -->
+      <div class="footer">
+        <p>
+          <strong>Gerado por Gerador de Livros IA</strong><br>
+          ${window.location.hostname} • ${currentDate}
+        </p>
+        <p style="font-size: 0.8em; margin-top: 10px;">
+          Este livro foi gerado automaticamente por inteligência artificial.<br>
+          O conteúdo é único e original, criado com base na descrição fornecida.
+        </p>
+      </div>
+    </body>
+    </html>
+  `;
+}
 
-    // Criar canvas do conteúdo
-    const canvas = await html2canvas(element, {
+// Exportar para PDF
+export async function exportToPDF(book: any): Promise<boolean> {
+  try {
+    console.log('📄 Iniciando exportação PDF...');
+    
+    // Criar elemento temporário para o HTML
+    const tempDiv = document.createElement('div');
+    tempDiv.style.position = 'absolute';
+    tempDiv.style.left = '-9999px';
+    tempDiv.style.top = '0';
+    tempDiv.style.width = '800px';
+    tempDiv.innerHTML = generateBookHTML(book);
+    document.body.appendChild(tempDiv);
+
+    // Configurar opções do html2canvas
+    const canvas = await html2canvas(tempDiv, {
       scale: 2, // Melhor qualidade
       useCORS: true,
-      allowTaint: true
+      allowTaint: false,
+      backgroundColor: '#ffffff',
+      logging: false,
+      width: 800,
+      windowWidth: 800
     });
 
-    const imgData = canvas.toDataURL('image/png');
+    // Remover elemento temporário
+    document.body.removeChild(tempDiv);
+
+    const imgData = canvas.toDataURL('image/jpeg', 0.9);
     
     // Criar PDF
     const pdf = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
-      format: 'a4'
+      format: 'a4',
+      compress: true
     });
 
     const pdfWidth = pdf.internal.pageSize.getWidth();
     const pdfHeight = pdf.internal.pageSize.getHeight();
     
-    // Adicionar capa
-    pdf.setFillColor(240, 240, 240);
-    pdf.rect(0, 0, pdfWidth, pdfHeight, 'F');
+    // Adicionar imagem ao PDF
+    pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight, '', 'FAST');
     
-    pdf.setFontSize(24);
-    pdf.setTextColor(0, 0, 0);
-    pdf.text(book.content.title, pdfWidth / 2, 80, { align: 'center' });
-    
-    pdf.setFontSize(16);
-    pdf.setTextColor(100, 100, 100);
-    pdf.text('Gerado por Gerador de Livros IA', pdfWidth / 2, 100, { align: 'center' });
-    
-    pdf.setFontSize(12);
-    pdf.text(new Date().toLocaleDateString('pt-BR'), pdfWidth / 2, 115, { align: 'center' });
-
-    pdf.addPage();
-
-    // Adicionar sinopse
-    pdf.setFontSize(18);
-    pdf.setTextColor(0, 0, 0);
-    pdf.text('Sinopse', 20, 30);
-    
-    pdf.setFontSize(12);
-    const synopsisLines = pdf.splitTextToSize(book.content.synopsis, pdfWidth - 40);
-    pdf.text(synopsisLines, 20, 45);
-
-    // Adicionar capítulos
-    let yPosition = 80;
-    
-    book.content.chapters.forEach((chapter: any, index: number) => {
-      if (yPosition > 250) {
-        pdf.addPage();
-        yPosition = 30;
-      }
-      
-      pdf.setFontSize(16);
-      pdf.setTextColor(0, 0, 0);
-      pdf.text(chapter.title, 20, yPosition);
-      yPosition += 10;
-      
-      pdf.setFontSize(11);
-      const chapterLines = pdf.splitTextToSize(chapter.content, pdfWidth - 40);
-      pdf.text(chapterLines, 20, yPosition);
-      
-      yPosition += (chapterLines.length * 6) + 20;
-    });
+    // Adicionar mais páginas se necessário (para livros muito longos)
+    const totalPages = pdf.internal.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      pdf.setPage(i);
+      pdf.setFontSize(10);
+      pdf.setTextColor(150, 150, 150);
+      pdf.text(
+        `Página ${i} de ${totalPages} - ${book.content.title}`,
+        pdfWidth / 2,
+        pdfHeight - 10,
+        { align: 'center' }
+      );
+    }
 
     // Baixar PDF
-    pdf.save(`${book.content.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`);
+    const fileName = `${book.content.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${Date.now()}.pdf`;
+    pdf.save(fileName);
     
+    console.log('✅ PDF exportado com sucesso:', fileName);
     return true;
+    
   } catch (error) {
-    console.error('Erro ao exportar PDF:', error);
-    throw new Error('Erro ao gerar PDF');
+    console.error('❌ Erro ao exportar PDF:', error);
+    
+    // Fallback: tentar método simples
+    try {
+      console.log('🔄 Tentando método alternativo...');
+      await exportToPDFSimple(book);
+      return true;
+    } catch (fallbackError) {
+      console.error('❌ Método alternativo também falhou:', fallbackError);
+      throw new Error('Não foi possível gerar o PDF. Tente exportar em DOCX ou TXT.');
+    }
   }
 }
 
-// Exportar para DOCX (simulação - texto formatado)
-export async function exportToDOCX(book: any) {
-  try {
-    // Criar conteúdo formatado para DOCX
-    let docContent = `
-Título: ${book.content.title}
-Data: ${new Date().toLocaleDateString('pt-BR')}
-Gerado por: Gerador de Livros IA
-
-${'='.repeat(50)}
-
-SINOPSE
-
-${book.content.synopsis}
-
-${'='.repeat(50)}
-
-CAPÍTULOS
-
-`;
+// Método simples alternativo para PDF
+async function exportToPDFSimple(book: any): Promise<boolean> {
+  const pdf = new jsPDF();
+  
+  // Configurações básicas
+  pdf.setFont('helvetica');
+  pdf.setFontSize(16);
+  
+  // Título
+  pdf.text(book.content.title, 20, 30);
+  pdf.setFontSize(12);
+  pdf.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, 20, 45);
+  
+  // Sinopse
+  pdf.setFontSize(14);
+  pdf.text('Sinopse', 20, 65);
+  pdf.setFontSize(10);
+  const synopsisLines = pdf.splitTextToSize(book.content.synopsis, 170);
+  pdf.text(synopsisLines, 20, 75);
+  
+  let yPosition = 100;
+  
+  // Capítulos
+  book.content.chapters.forEach((chapter: any, index: number) => {
+    if (yPosition > 250) {
+      pdf.addPage();
+      yPosition = 20;
+    }
     
-    // Adicionar capítulos
-    book.content.chapters.forEach((chapter: any, index: number) => {
-      docContent += `\nCAPÍTULO ${index + 1}: ${chapter.title}\n\n`;
-      docContent += `${chapter.content}\n\n`;
-      docContent += `${'-'.repeat(50)}\n`;
-    });
+    pdf.setFontSize(12);
+    pdf.text(chapter.title, 20, yPosition);
+    yPosition += 10;
+    
+    pdf.setFontSize(10);
+    const chapterLines = pdf.splitTextToSize(chapter.content, 170);
+    
+    // Verificar se precisa de nova página
+    if (yPosition + (chapterLines.length * 5) > 280) {
+      pdf.addPage();
+      yPosition = 20;
+      pdf.setFontSize(12);
+      pdf.text(chapter.title + ' (continuação)', 20, yPosition);
+      yPosition += 10;
+    }
+    
+    pdf.text(chapterLines, 20, yPosition);
+    yPosition += (chapterLines.length * 5) + 15;
+  });
+  
+  // Rodapé
+  const totalPages = pdf.internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    pdf.setPage(i);
+    pdf.setFontSize(8);
+    pdf.text(
+      `Página ${i} de ${totalPages} - Gerador de Livros IA`,
+      105,
+      290,
+      { align: 'center' }
+    );
+  }
+  
+  pdf.save(`${book.content.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`);
+  return true;
+}
 
-    // Criar blob e baixar
-    const blob = new Blob([docContent], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+// Exportar para DOCX (melhorado)
+export async function exportToDOCX(book: any): Promise<boolean> {
+  try {
+    console.log('📝 Iniciando exportação DOCX...');
+    
+    let docContent = `TÍTULO: ${book.content.title}\n`;
+    docContent += '='.repeat(60) + '\n\n';
+    
+    docContent += `DATA: ${new Date().toLocaleDateString('pt-BR')}\n`;
+    docContent += `GÊNERO: ${book.config.genre}\n`;
+    docContent += `PÚBLICO: ${book.config.audience}\n`;
+    docContent += `CAPÍTULOS: ${book.content.chapters.length}\n\n`;
+    
+    docContent += 'GERADO POR: Gerador de Livros IA\n';
+    docContent += '='.repeat(60) + '\n\n';
+    
+    // Sinopse
+    docContent += 'SINOPSE\n';
+    docContent += '-'.repeat(40) + '\n\n';
+    docContent += book.content.synopsis + '\n\n';
+    
+    // Descrição original
+    docContent += 'DESCRIÇÃO ORIGINAL\n';
+    docContent += '-'.repeat(40) + '\n\n';
+    docContent += `"${book.description}"\n\n`;
+    
+    docContent += '='.repeat(60) + '\n\n';
+    
+    // Capítulos
+    docContent += 'CAPÍTULOS\n';
+    docContent += '='.repeat(60) + '\n\n';
+    
+    book.content.chapters.forEach((chapter: any, index: number) => {
+      docContent += `CAPÍTULO ${index + 1}: ${chapter.title}\n`;
+      docContent += '-'.repeat(50) + '\n\n';
+      docContent += chapter.content + '\n\n';
+      docContent += '―'.repeat(30) + '\n\n';
+    });
+    
+    // Rodapé
+    docContent += '\n' + '='.repeat(60) + '\n';
+    docContent += 'Gerado por Gerador de Livros IA\n';
+    docContent += `${window.location.hostname}\n`;
+    docContent += `Data: ${new Date().toLocaleDateString('pt-BR')}\n`;
+    docContent += '='.repeat(60) + '\n';
+
+    // Criar e baixar arquivo
+    const blob = new Blob([docContent], { 
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
+    });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -124,29 +375,61 @@ CAPÍTULOS
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     
+    console.log('✅ DOCX exportado com sucesso');
     return true;
+    
   } catch (error) {
-    console.error('Erro ao exportar DOCX:', error);
+    console.error('❌ Erro ao exportar DOCX:', error);
     throw new Error('Erro ao gerar DOCX');
   }
 }
 
-// Exportar para TXT (alternativa simples)
-export async function exportToTXT(book: any) {
+// Exportar para TXT (melhorado)
+export async function exportToTXT(book: any): Promise<boolean> {
   try {
-    let txtContent = `Título: ${book.content.title}\n`;
-    txtContent += `Data: ${new Date().toLocaleDateString('pt-BR')}\n`;
-    txtContent += `Gerado por: Gerador de Livros IA\n\n`;
-    txtContent += `SINOPSE\n\n${book.content.synopsis}\n\n`;
-    txtContent += `CAPÍTULOS\n\n`;
+    let txtContent = '';
     
+    // Cabeçalho formatado
+    txtContent += '✨ '.repeat(15) + '\n';
+    txtContent += `TÍTULO: ${book.content.title}\n`;
+    txtContent += '✨ '.repeat(15) + '\n\n';
+    
+    txtContent += `📅 Data: ${new Date().toLocaleDateString('pt-BR')}\n`;
+    txtContent += `🎭 Gênero: ${book.config.genre}\n`;
+    txtContent += `👥 Público: ${book.config.audience}\n`;
+    txtContent += `📚 Capítulos: ${book.content.chapters.length}\n\n`;
+    
+    txtContent += '―'.repeat(40) + '\n\n';
+    
+    // Sinopse
+    txtContent += 'SINOPSE:\n';
+    txtContent += '―'.repeat(20) + '\n';
+    txtContent += book.content.synopsis + '\n\n';
+    
+    // Descrição original
+    txtContent += 'DESCRIÇÃO ORIGINAL:\n';
+    txtContent += '―'.repeat(25) + '\n';
+    txtContent += `"${book.description}"\n\n`;
+    
+    txtContent += '═'.repeat(50) + '\n\n';
+    
+    // Capítulos
     book.content.chapters.forEach((chapter: any, index: number) => {
-      txtContent += `CAPÍTULO ${index + 1}: ${chapter.title}\n\n`;
-      txtContent += `${chapter.content}\n\n`;
-      txtContent += `---\n\n`;
+      txtContent += `CAPÍTULO ${index + 1}\n`;
+      txtContent += `❖ ${chapter.title}\n`;
+      txtContent += '―'.repeat(40) + '\n\n';
+      txtContent += chapter.content + '\n\n';
+      txtContent += '※'.repeat(20) + '\n\n';
     });
+    
+    // Rodapé
+    txtContent += '═'.repeat(50) + '\n';
+    txtContent += 'Gerado por Gerador de Livros IA\n';
+    txtContent += `${window.location.hostname}\n`;
+    txtContent += `Data: ${new Date().toLocaleDateString('pt-BR')}\n`;
+    txtContent += '═'.repeat(50) + '\n';
 
-    const blob = new Blob([txtContent], { type: 'text/plain' });
+    const blob = new Blob([txtContent], { type: 'text/plain; charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -158,7 +441,7 @@ export async function exportToTXT(book: any) {
     
     return true;
   } catch (error) {
-    console.error('Erro ao exportar TXT:', error);
+    console.error('❌ Erro ao exportar TXT:', error);
     throw new Error('Erro ao gerar TXT');
   }
 }
