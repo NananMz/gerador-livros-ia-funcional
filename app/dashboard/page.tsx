@@ -1,6 +1,6 @@
 'use client'
 
-import { useAuth } from '../../../contexts/AuthContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import Link from 'next/link'
@@ -27,7 +27,6 @@ export default function DashboardPage() {
     </div>
   )
 
-  // Livros mockados - depois vem do banco de dados
   const books = [
     { id: 1, title: "Aventura na Floresta", date: "2024-01-15", status: "Concluído" },
     { id: 2, title: "O Mistério do Castelo", date: "2024-01-10", status: "Concluído" },
