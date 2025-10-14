@@ -21,8 +21,14 @@ export default function LoginPage() {
       setLoading(true)
       await login(email, password)
       router.push('/dashboard')
-    } catch (error) {
-      setError('Falha no login. Verifique suas credenciais.')
+    } catch (error: any) {
+      if (error.code === 'auth/invalid-credential') {
+        setError('Email ou senha incorretos.')
+      } else if (error.code === 'auth/user-not-found') {
+        setError('Usuário não encontrado.')
+      } else {
+        setError('Falha no login. Tente novamente.')
+      }
     }
     setLoading(false)
   }
