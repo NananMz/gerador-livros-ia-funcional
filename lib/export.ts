@@ -96,14 +96,9 @@ function generateBookHTML(book: any): string {
           font-size: 0.9em;
         }
         
-        .page-break {
-          page-break-before: always;
-        }
-        
         @media print {
           body { padding: 20px; }
           .cover { padding: 60px 20px; }
-          .page-break { display: block; }
         }
       </style>
     </head>
@@ -137,14 +132,12 @@ function generateBookHTML(book: any): string {
       </div>
       
       <!-- Capítulos -->
-      <div style="page-break-before: always;"></div>
-      
       <div style="text-align: center; margin: 40px 0;">
         <h2 style="color: #2c5aa0; border: none;">📚 Capítulos</h2>
       </div>
       
       ${book.content.chapters.map((chapter: any, index: number) => `
-        <div class="chapter ${index > 0 ? 'page-break' : ''}">
+        <div class="chapter">
           <h2>${chapter.title}</h2>
           <div class="chapter-content">
             ${chapter.content.split('\n\n').map(paragraph => 
@@ -158,7 +151,7 @@ function generateBookHTML(book: any): string {
       <div class="footer">
         <p>
           <strong>Gerado por Gerador de Livros IA</strong><br>
-          ${window.location.hostname} • ${currentDate}
+          ${typeof window !== 'undefined' ? window.location.hostname : 'gerador-livros-ia'} • ${currentDate}
         </p>
         <p style="font-size: 0.8em; margin-top: 10px;">
           Este livro foi gerado automaticamente por inteligência artificial.<br>
@@ -186,13 +179,12 @@ export async function exportToPDF(book: any): Promise<boolean> {
 
     // Configurar opções do html2canvas
     const canvas = await html2canvas(tempDiv, {
-      scale: 2, // Melhor qualidade
+      scale: 2,
       useCORS: true,
       allowTaint: false,
       backgroundColor: '#ffffff',
       logging: false,
-      width: 800,
-      windowWidth: 800
+      width: 800
     });
 
     // Remover elemento temporário
@@ -214,20 +206,6 @@ export async function exportToPDF(book: any): Promise<boolean> {
     // Adicionar imagem ao PDF
     pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight, '', 'FAST');
     
-    // Adicionar mais páginas se necessário (para livros muito longos)
-    const totalPages = pdf.internal.getNumberOfPages();
-    for (let i = 1; i <= totalPages; i++) {
-      pdf.setPage(i);
-      pdf.setFontSize(10);
-      pdf.setTextColor(150, 150, 150);
-      pdf.text(
-        `Página ${i} de ${totalPages} - ${book.content.title}`,
-        pdfWidth / 2,
-        pdfHeight - 10,
-        { align: 'center' }
-      );
-    }
-
     // Baixar PDF
     const fileName = `${book.content.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${Date.now()}.pdf`;
     pdf.save(fileName);
@@ -250,7 +228,7 @@ export async function exportToPDF(book: any): Promise<boolean> {
   }
 }
 
-// Método simples alternativo para PDF
+// Método simples alternativo para PDF (sem numeração de páginas)
 async function exportToPDFSimple(book: any): Promise<boolean> {
   const pdf = new jsPDF();
   
@@ -299,19 +277,6 @@ async function exportToPDFSimple(book: any): Promise<boolean> {
     yPosition += (chapterLines.length * 5) + 15;
   });
   
-  // Rodapé
-  const totalPages = pdf.internal.getNumberOfPages();
-  for (let i = 1; i <= totalPages; i++) {
-    pdf.setPage(i);
-    pdf.setFontSize(8);
-    pdf.text(
-      `Página ${i} de ${totalPages} - Gerador de Livros IA`,
-      105,
-      290,
-      { align: 'center' }
-    );
-  }
-  
   pdf.save(`${book.content.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`);
   return true;
 }
@@ -358,7 +323,7 @@ export async function exportToDOCX(book: any): Promise<boolean> {
     // Rodapé
     docContent += '\n' + '='.repeat(60) + '\n';
     docContent += 'Gerado por Gerador de Livros IA\n';
-    docContent += `${window.location.hostname}\n`;
+    docContent += `${typeof window !== 'undefined' ? window.location.hostname : 'gerador-livros-ia'}\n`;
     docContent += `Data: ${new Date().toLocaleDateString('pt-BR')}\n`;
     docContent += '='.repeat(60) + '\n';
 
@@ -425,7 +390,7 @@ export async function exportToTXT(book: any): Promise<boolean> {
     // Rodapé
     txtContent += '═'.repeat(50) + '\n';
     txtContent += 'Gerado por Gerador de Livros IA\n';
-    txtContent += `${window.location.hostname}\n`;
+    txtContent += `${typeof window !== 'undefined' ? window.location.hostname : 'gerador-livros-ia'}\n`;
     txtContent += `Data: ${new Date().toLocaleDateString('pt-BR')}\n`;
     txtContent += '═'.repeat(50) + '\n';
 
