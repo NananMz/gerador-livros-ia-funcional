@@ -1,8 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
+import { bookTemplates, BookTemplate, customTemplate, getTemplateById } from '@/data/book-templates'
+import { BookGenerationSpinner } from '@/components/LoadingSpinner'
 
 interface GenerationError {
   type: 'quota' | 'network' | 'api' | 'validation' | 'unknown';
@@ -13,15 +15,53 @@ interface GenerationError {
 export default function CreateBookPage() {
   const { user } = useAuth()
   const router = useRouter()
+  const [activeTab, setActiveTab] = useState<'templates' | 'custom'>('templates')
+  const [selectedTemplate, setSelectedTemplate] = useState<BookTemplate | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  
   const [formData, setFormData] = useState({
     description: '',
     size: 'medium',
     genre: 'aventura',
     audience: 'jovens'
   })
+  
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<GenerationError | null>(null)
   const [retryCount, setRetryCount] = useState(0)
+
+  // Filtrar templates baseado na busca
+  const filteredTemplates = searchQuery 
+    ? bookTemplates.filter(template =>
+        template.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        template.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        template.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
+      )
+    : bookTemplates
+
+  // Aplicar template selecionado
+  const applyTemplate = (template: BookTemplate) => {
+    setSelectedTemplate(template)
+    setFormData({
+      description: template.prompt,
+      size: template.recommendedSize,
+      genre: template.genre,
+      audience: template.audience
+    })
+    setActiveTab('custom')
+  }
+
+  // Voltar para seleção de templates
+  const backToTemplates = () => {
+    setSelectedTemplate(null)
+    setActiveTab('templates')
+    setFormData({
+      description: '',
+      size: 'medium',
+      genre: 'aventura',
+      audience: 'jovens'
+    })
+  }
 
   const getErrorConfig = (error: any): GenerationError => {
     const errorMessage = error?.message || error?.toString() || '';
@@ -110,7 +150,8 @@ export default function CreateBookPage() {
         config: formData,
         content: data,
         createdAt: new Date().toISOString(),
-        userId: user.uid
+        userId: user.uid,
+        templateUsed: selectedTemplate?.id || 'custom'
       }
 
       // Salvar no localStorage
@@ -166,12 +207,117 @@ export default function CreateBookPage() {
     }
   }
 
+  // Tela de seleção de templates
+  if (activeTab === 'templates') {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-gray-800 mb-2">Escolha um Template</h1>
+            <p className="text-gray-600">Comece com uma ideia pré-definida ou crie algo único</p>
+          </div>
+
+          {/* Barra de busca */}
+          <div className="max-w-md mx-auto mb-8">
+            <input
+              type="text"
+              placeholder="🔍 Buscar templates por gênero, tema..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* Grid de templates */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+            {filteredTemplates.map((template) => (
+              <div
+                key={template.id}
+                onClick={() => applyTemplate(template)}
+                className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer group"
+              >
+                <div className="flex items-start space-x-4 mb-4">
+                  <span className="text-3xl group-hover:scale-110 transition-transform duration-200">
+                    {template.icon}
+                  </span>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-gray-800 mb-1">{template.title}</h3>
+                    <p className="text-sm text-gray-600">{template.description}</p>
+                  </div>
+                </div>
+                
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {template.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+                
+                <div className="flex justify-between items-center text-sm text-gray-500">
+                  <span>👥 {template.audience}</span>
+                  <span>📖 {template.recommendedSize === 'small' ? 'Pequeno' : 
+                           template.recommendedSize === 'medium' ? 'Médio' : 'Grande'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Template customizado */}
+          <div className="text-center">
+            <button
+              onClick={() => {
+                setSelectedTemplate(customTemplate)
+                setActiveTab('custom')
+              }}
+              className="bg-white border-2 border-dashed border-gray-300 rounded-xl p-8 hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 group w-full max-w-md mx-auto"
+            >
+              <div className="text-4xl mb-3 group-hover:scale-110 transition-transform duration-200">
+                {customTemplate.icon}
+              </div>
+              <h3 className="font-semibold text-gray-800 mb-2">{customTemplate.title}</h3>
+              <p className="text-gray-600">{customTemplate.description}</p>
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Tela de criação customizada
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-sm p-8">
+        {/* Cabeçalho com breadcrumb */}
+        <div className="flex items-center justify-between mb-6">
+          <button
+            onClick={backToTemplates}
+            className="flex items-center space-x-2 text-gray-600 hover:text-gray-800 transition-colors duration-200"
+          >
+            <span>←</span>
+            <span>Voltar aos Templates</span>
+          </button>
+          
+          {selectedTemplate && selectedTemplate.id !== 'custom' && (
+            <div className="flex items-center space-x-2 bg-blue-50 px-3 py-1 rounded-full">
+              <span>{selectedTemplate.icon}</span>
+              <span className="text-sm text-blue-800">{selectedTemplate.title}</span>
+            </div>
+          )}
+        </div>
+
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Criar Novo Livro</h1>
-          <p className="text-gray-600">Descreva o livro que você quer criar</p>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">
+            {selectedTemplate?.id === 'custom' ? 'Criação Personalizada' : selectedTemplate?.title}
+          </h1>
+          <p className="text-gray-600">
+            {selectedTemplate?.id === 'custom' 
+              ? 'Crie um livro totalmente único com sua própria ideia' 
+              : selectedTemplate?.description}
+          </p>
         </div>
 
         {error && (
@@ -219,7 +365,11 @@ export default function CreateBookPage() {
               onChange={(e) => setFormData({...formData, description: e.target.value})}
               rows={6}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-              placeholder="Ex: Crie uma história sobre um dragão que aprende a fazer amigos numa floresta encantada. Inclua personagens interessantes, desafios emocionantes e um final satisfatório..."
+              placeholder={
+                selectedTemplate?.id === 'custom' 
+                  ? "Descreva sua ideia única aqui. Seja específico sobre personagens, cenário, conflitos e o tom desejado..."
+                  : selectedTemplate?.prompt
+              }
               required
               disabled={loading}
               minLength={10}
@@ -315,6 +465,9 @@ export default function CreateBookPage() {
           </div>
         </form>
       </div>
+
+      {/* Loading Spinner Global */}
+      {loading && <BookGenerationSpinner />}
     </div>
   )
 }
