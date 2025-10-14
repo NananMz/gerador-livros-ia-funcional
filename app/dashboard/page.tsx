@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { exportToTXT } from '@/lib/export'
+import { DashboardSpinner } from '@/components/LoadingSpinner'
 
 interface Book {
   id: string
@@ -25,15 +26,28 @@ interface Book {
   }
   createdAt: string
   userId: string
+  templateUsed?: string
+}
+
+interface UserStats {
+  totalBooks: number
+  totalChapters: number
+  favoriteGenre: string
+  booksThisMonth: number
+  largestBook: Book | null
+  genreDistribution: { [key: string]: number }
+  sizeDistribution: { [key: string]: number }
 }
 
 export default function DashboardPage() {
   const { user, loading: authLoading } = useAuth()
   const router = useRouter()
   const [books, setBooks] = useState<Book[]>([])
+  const [stats, setStats] = useState<UserStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [exportingId, setExportingId] = useState<string | null>(null)
+  const [activeFilter, setActiveFilter] = useState<'all' | 'recent' | 'large' | string>('all')
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -47,6 +61,50 @@ export default function DashboardPage() {
     }
   }, [user])
 
+  const calculateStats = (books: Book[]): UserStats => {
+    const totalBooks = books.length
+    const totalChapters = books.reduce((sum, book) => sum + book.content.chapters.length, 0)
+    
+    // Distribuição por gênero
+    const genreDistribution = books.reduce((acc, book) => {
+      acc[book.config.genre] = (acc[book.config.genre] || 0) + 1
+      return acc
+    }, {} as { [key: string]: number })
+    
+    // Distribuição por tamanho
+    const sizeDistribution = books.reduce((acc, book) => {
+      acc[book.config.size] = (acc[book.config.size] || 0) + 1
+      return acc
+    }, {} as { [key: string]: number })
+    
+    // Gênero favorito
+    const favoriteGenre = Object.entries(genreDistribution)
+      .sort(([,a], [,b]) => b - a)[0]?.[0] || 'Nenhum'
+    
+    // Livros deste mês
+    const currentMonth = new Date().getMonth()
+    const currentYear = new Date().getFullYear()
+    const booksThisMonth = books.filter(book => {
+      const bookDate = new Date(book.createdAt)
+      return bookDate.getMonth() === currentMonth && bookDate.getFullYear() === currentYear
+    }).length
+    
+    // Maior livro (mais capítulos)
+    const largestBook = books.reduce((largest, book) => 
+      !largest || book.content.chapters.length > largest.content.chapters.length ? book : largest
+    , null as Book | null)
+
+    return {
+      totalBooks,
+      totalChapters,
+      favoriteGenre,
+      booksThisMonth,
+      largestBook,
+      genreDistribution,
+      sizeDistribution
+    }
+  }
+
   const loadUserBooks = () => {
     try {
       setLoading(true)
@@ -54,6 +112,7 @@ export default function DashboardPage() {
       // Ordenar por data de criação (mais recente primeiro)
       userBooks.sort((a: Book, b: Book) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       setBooks(userBooks)
+      setStats(calculateStats(userBooks))
     } catch (error) {
       console.error('Erro ao carregar livros:', error)
       setError('Erro ao carregar livros')
@@ -76,12 +135,13 @@ export default function DashboardPage() {
   }
 
   const handleDeleteBook = (bookId: string) => {
-    if (confirm('Tem certeza que deseja excluir este livro?')) {
+    if (confirm('Tem certeza que deseja excluir este livro? Esta ação não pode ser desfeita.')) {
       try {
         const userBooks = JSON.parse(localStorage.getItem(`books_${user!.uid}`) || '[]')
         const updatedBooks = userBooks.filter((book: Book) => book.id !== bookId)
         localStorage.setItem(`books_${user!.uid}`, JSON.stringify(updatedBooks))
         setBooks(updatedBooks)
+        setStats(calculateStats(updatedBooks))
       } catch (error) {
         console.error('Erro ao excluir livro:', error)
         setError('Erro ao excluir livro')
@@ -110,20 +170,50 @@ export default function DashboardPage() {
     return genres[genre] || genre
   }
 
-  if (authLoading) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-        <div className="text-xl text-gray-600">Carregando...</div>
-      </div>
-    </div>
-  )
+  const getFilteredBooks = () => {
+    switch (activeFilter) {
+      case 'recent':
+        return books.slice(0, 5) // Últimos 5 livros
+      case 'large':
+        return books.filter(book => book.config.size === 'large')
+      case 'all':
+      default:
+        return books
+    }
+  }
 
-  if (!user) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="text-xl text-gray-600">Redirecionando...</div>
-    </div>
-  )
+  const getGenreIcon = (genre: string) => {
+    const icons: { [key: string]: string } = {
+      aventura: '🏔️',
+      fantasia: '🐉',
+      ficcao: '🚀',
+      romance: '💕',
+      suspense: '🕵️',
+      infantil: '🐻'
+    }
+    return icons[genre] || '📚'
+  }
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="text-xl text-gray-600">Carregando...</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-xl text-gray-600">Redirecionando...</div>
+      </div>
+    )
+  }
+
+  const filteredBooks = getFilteredBooks()
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
@@ -150,12 +240,7 @@ export default function DashboardPage() {
         )}
 
         {loading ? (
-          <div className="flex justify-center items-center py-12">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <div className="text-gray-600">Carregando seus livros...</div>
-            </div>
-          </div>
+          <DashboardSpinner />
         ) : books.length === 0 ? (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 sm:p-12 text-center">
             <div className="text-6xl mb-4">📚</div>
@@ -192,28 +277,105 @@ export default function DashboardPage() {
         ) : (
           <>
             {/* Estatísticas */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 text-center">
-                <div className="text-2xl font-bold text-blue-600 mb-1">{books.length}</div>
-                <div className="text-sm text-gray-600">Total de Livros</div>
-              </div>
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 text-center">
-                <div className="text-2xl font-bold text-green-600 mb-1">
-                  {books.filter(book => book.config.size === 'large').length}
+            {stats && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-2xl font-bold text-blue-600 mb-1">{stats.totalBooks}</div>
+                      <div className="text-sm text-gray-600">Total de Livros</div>
+                    </div>
+                    <div className="text-2xl">📚</div>
+                  </div>
                 </div>
-                <div className="text-sm text-gray-600">Livros Grandes</div>
-              </div>
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 text-center">
-                <div className="text-2xl font-bold text-purple-600 mb-1">
-                  {new Set(books.map(book => book.config.genre)).size}
+                
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-2xl font-bold text-green-600 mb-1">{stats.totalChapters}</div>
+                      <div className="text-sm text-gray-600">Capítulos Criados</div>
+                    </div>
+                    <div className="text-2xl">📖</div>
+                  </div>
                 </div>
-                <div className="text-sm text-gray-600">Gêneros Diferentes</div>
+                
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-lg font-bold text-purple-600 mb-1">
+                        {getGenreIcon(stats.favoriteGenre)} {getGenreLabel(stats.favoriteGenre)}
+                      </div>
+                      <div className="text-sm text-gray-600">Gênero Favorito</div>
+                    </div>
+                    <div className="text-2xl">🏆</div>
+                  </div>
+                </div>
+                
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-2xl font-bold text-orange-600 mb-1">{stats.booksThisMonth}</div>
+                      <div className="text-sm text-gray-600">Este Mês</div>
+                    </div>
+                    <div className="text-2xl">📅</div>
+                  </div>
+                </div>
               </div>
+            )}
+
+            {/* Distribuição por Gênero */}
+            {stats && Object.keys(stats.genreDistribution).length > 0 && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Distribuição por Gênero</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                  {Object.entries(stats.genreDistribution).map(([genre, count]) => (
+                    <div key={genre} className="text-center p-3 bg-gray-50 rounded-lg">
+                      <div className="text-2xl mb-1">{getGenreIcon(genre)}</div>
+                      <div className="font-semibold text-gray-800">{getGenreLabel(genre)}</div>
+                      <div className="text-sm text-gray-600">{count} livro{count !== 1 ? 's' : ''}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Filtros */}
+            <div className="flex flex-wrap gap-2 mb-6">
+              <button
+                onClick={() => setActiveFilter('all')}
+                className={`px-4 py-2 rounded-lg transition duration-200 ${
+                  activeFilter === 'all' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                Todos ({books.length})
+              </button>
+              <button
+                onClick={() => setActiveFilter('recent')}
+                className={`px-4 py-2 rounded-lg transition duration-200 ${
+                  activeFilter === 'recent' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                Recentes
+              </button>
+              <button
+                onClick={() => setActiveFilter('large')}
+                className={`px-4 py-2 rounded-lg transition duration-200 ${
+                  activeFilter === 'large' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                Livros Grandes ({stats?.sizeDistribution.large || 0})
+              </button>
             </div>
 
             {/* Grid de Livros */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-              {books.map((book) => (
+              {filteredBooks.map((book) => (
                 <div key={book.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
                   {/* Cabeçalho do Card */}
                   <div className="flex justify-between items-start mb-3">
@@ -244,7 +406,7 @@ export default function DashboardPage() {
                       {getSizeLabel(book.config.size)}
                     </span>
                     <span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
-                      {getGenreLabel(book.config.genre)}
+                      {getGenreIcon(book.config.genre)} {getGenreLabel(book.config.genre)}
                     </span>
                     <span className="px-2 py-1 rounded-full text-xs bg-purple-100 text-purple-800">
                       {book.config.audience}
@@ -291,9 +453,13 @@ export default function DashboardPage() {
             </div>
 
             {/* Footer do Dashboard */}
-            <div className="mt-8 text-center">
-              <p className="text-gray-500 text-sm">
-                {books.length} {books.length === 1 ? 'livro' : 'livros'} criados • 
+            <div className="mt-8 text-center bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <p className="text-gray-500">
+                📚 <strong>{books.length}</strong> {books.length === 1 ? 'livro' : 'livros'} criados • 
+                📖 <strong>{stats?.totalChapters || 0}</strong> capítulos • 
+                🎭 Gênero favorito: <strong>{getGenreLabel(stats?.favoriteGenre || '')}</strong>
+              </p>
+              <p className="text-sm text-gray-400 mt-2">
                 Última atualização: {new Date().toLocaleTimeString('pt-BR')}
               </p>
             </div>
