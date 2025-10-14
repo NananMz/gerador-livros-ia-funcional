@@ -1,5 +1,6 @@
 import './globals.css'
-import { AuthProvider } from '@/contexts/AuthContext'
+import { AuthProvider } from '../contexts/AuthContext'
+import Header from '../components/Header'
 
 export default function RootLayout({
   children,
@@ -10,7 +11,10 @@ export default function RootLayout({
     <html lang="pt-BR">
       <body>
         <AuthProvider>
-          {children}
+          <Header />
+          <main>
+            {children}
+          </main>
         </AuthProvider>
       </body>
     </html>
