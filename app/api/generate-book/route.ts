@@ -15,7 +15,7 @@ const BOOK_SIZE_CONFIG = {
     chapters: 4,
     wordsPerChapter: "800-1.200 palavras",
     estimatedWords: "3.000-5.000 palavras totais",
-    maxTokens: 3000,
+    maxTokens: 6000,
     model: "gpt-3.5-turbo",
     readingTime: "1-2 horas",
     target: "Leitura rápida e objetiva"
@@ -27,7 +27,7 @@ const BOOK_SIZE_CONFIG = {
     chapters: 8,
     wordsPerChapter: "1.500-2.500 palavras",
     estimatedWords: "12.000-20.000 palavras totais",
-    maxTokens: 6000,
+    maxTokens: 12000,
     model: "gpt-3.5-turbo-16k",
     readingTime: "3-4 horas",
     target: "Leitura com desenvolvimento moderado"
@@ -39,7 +39,7 @@ const BOOK_SIZE_CONFIG = {
     chapters: 12,
     wordsPerChapter: "2.000-3.500 palavras",
     estimatedWords: "24.000-42.000 palavras totais",
-    maxTokens: 8000,
+    maxTokens: 14000,
     model: "gpt-3.5-turbo-16k",
     readingTime: "5-7 horas",
     target: "Leitura imersiva e detalhada"
@@ -51,7 +51,7 @@ const BOOK_SIZE_CONFIG = {
     chapters: 16,
     wordsPerChapter: "2.500-4.000 palavras",
     estimatedWords: "40.000-64.000 palavras totais",
-    maxTokens: 10000,
+    maxTokens: 16000,
     model: "gpt-3.5-turbo-16k",
     readingTime: "8-10 horas",
     target: "Experiência de leitura completa"
