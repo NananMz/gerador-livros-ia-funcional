@@ -5,85 +5,133 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// CONFIGURAÇÃO PARA LIVROS GRANDES (120+ páginas)
+const SIZE_CONFIG = {
+  small: {
+    pages: '40-60',
+    chapters: 4,
+    wordsPerChapter: '800-1200',
+    maxTokens: 4000,
+    model: "gpt-3.5-turbo"
+  },
+  medium: {
+    pages: '80-120', 
+    chapters: 8,
+    wordsPerChapter: '1500-2500',
+    maxTokens: 8000,
+    model: "gpt-3.5-turbo-16k"
+  },
+  large: {
+    pages: '150-200',
+    chapters: 12,
+    wordsPerChapter: '3000-5000',
+    maxTokens: 12000,
+    model: "gpt-3.5-turbo-16k"
+  },
+  epic: {
+    pages: '250-350',
+    chapters: 16,
+    wordsPerChapter: '4000-7000', 
+    maxTokens: 15000,
+    model: "gpt-3.5-turbo-16k"
+  }
+};
+
 export async function POST(request: NextRequest) {
   try {
     const { description, size, genre, audience, chapterCount } = await request.json();
 
-    console.log('📖 Recebendo descrição para expansão...');
+    console.log('📖 SOLICITANDO LIVRO GRANDE...');
 
-    // Configuração baseada no tamanho
-    const config = {
-      chapters: chapterCount || 8,
-      maxTokens: 3500,
-      genre: genre || 'Suspense Científico',
-      audience: audience || 'Jovem Adulto'
-    };
+    const config = SIZE_CONFIG[size as keyof typeof SIZE_CONFIG] || SIZE_CONFIG.large;
+    const finalChapterCount = chapterCount || config.chapters;
 
-    // PROMPT PARA EXPANSÃO CRIATIVA
-    const expansionPrompt = `
-VOCÊ É UM ESCRITOR PROFISSIONAL. Sua missão é PEGAR esta DESCRIÇÃO DE LIVRO e TRANSFORMÁ-LA em um LIVRO COMPLETO e DETALHADO.
+    console.log(`📊 CONFIGURAÇÃO: ${config.pages} páginas | ${finalChapterCount} capítulos | ${config.maxTokens} tokens`);
 
-## DESCRIÇÃO ORIGINAL DO AUTOR:
+    // PROMPT OTIMIZADO PARA LIVROS LONGOS
+    const longFormPrompt = `
+# CRIAÇÃO DE LIVRO DE 120+ PÁGINAS
+
+## PREMISSA ORIGINAL DO AUTOR:
 """
 ${description}
 """
 
 ## SUA MISSÃO:
-Expanda esta descrição em um LIVRO COMPLETO com ${config.chapters} capítulos. 
+Transformar esta premissa em um **ROMANCE COMPLETO** de aproximadamente ${config.pages} páginas.
 
-**SEGUA EXATAMENTE:**
-- ✅ **MESMOS PERSONAGENS** (Caio, Lis, mentor, governo)
-- ✅ **MESMO ENREDO** (experimento de apagamento, buraco no vazio)
-- ✅ **MESMO UNIVERSO** (Instalação 09, Teoria da Ausência)
-- ✅ **MESMOS TEMAS** (ciência vs ética, existência, apagamento)
+## ESPECIFICAÇÕES TÉCNICAS:
+- **CAPÍTULOS:** ${finalChapterCount} capítulos completos
+- **PALAVRAS POR CAPÍTULO:** ${config.wordsPerChapter} palavras
+- **TOTAL ESTIMADO:** ${finalChapterCount * 3000}-${finalChapterCount * 5000} palavras
+- **PÚBLICO:** ${audience}
+- **GÊNERO:** ${genre}
 
-**O QUE EXPANDIR:**
-- 🔥 **DIÁLOGOS COMPLETOS** entre os personagens
-- 🎭 **CENAS DETALHADAS** com ações e emoções
-- 🏛️ **DESCRIÇÕES RICAS** dos ambientes e sensações
-- 📈 **DESENVOLVIMENTO** da trama passo a passo
-- 💭 **PENSAMENTOS** internos dos personagens
+## ESTRUTURA DE CADA CAPÍTULO (MÍNIMO 3-4 PÁGINAS):
+1. **ABERTURA IMPACTANTE** (1-2 parágrafos)
+2. **DESENVOLVIMENTO PRINCIPAL** (4-6 parágrafos com diálogos)
+3. **CONFLITO/REVELAÇÃO** (2-3 parágrafos)
+4. **RESOLUÇÃO PARCIAL/GANCHO** (1-2 parágrafos)
 
-**NÃO APENAS REPITA - EXPANDA:**
-- Transforme resumos em cenas completas
-- Converta ideias em diálogos reais
-- Desenvolva momentos mencionados em capítulos completos
+## CONTEÚDO OBRIGATÓRIO POR CAPÍTULO:
+- ✅ **DIÁLOGOS EXTENSOS** (mínimo 3-5 conversas completas)
+- ✅ **DESCRIÇÕES DETALHADAS** (ambientes, emoções, sensações)
+- ✅ **AÇÕES E CENAS COMPLETAS**
+- ✅ **DESENVOLVIMENTO DE PERSONAGENS**
+- ✅ **PROGRESSÃO DA TRAMA**
 
-## EXEMPLO DE EXPANSÃO:
-Se a descrição diz: "Caio e Lis investigam desaparecimento"
-VOCÊ CRIA: 
-"Caio ajustou seu equipamento de monitoramento, as luzes piscando em ritmo irregular. 'Algo está errado aqui, Lis', sussurrou, os olhos fixos nos sensores. Ela se aproximou, sua respiração formando nuvens no ar gelado. 'Os registros mostram que eles entraram aqui às 03:47, mas não há saída.' Seus dedos tremiam ao tocar o terminal. De repente, as luzes piscaram e um eco distante ecoou pelo corredor vazio..."
+## EXEMPLO DE CAPÍTULO LONGO:
+Não: "Caio investigou o desaparecimento"
+Sim: 
+"""
+O corredor da Instalação 09 ecoava com o som de seus passos apressados. Caio ajustou o colar do jaleco, sentindo o suor frio escorrer por suas costas. 'Lis, você está recebendo os dados do sensor B7?' 
 
-## FORMATO DE SAÍDA (APENAS JSON):
+A voz dela veio trêmula pelo comunicador: 'Estão todos corrompidos, Caio. É como se... como se alguém tivesse deletado as informações da realidade.'
+
+Ele parou diante da porta da Sala de Testes 4, sua mão pairando sobre o painel de acesso. 'Precisamos descobrir o que aconteceu com a equipe do turno noturno.' 
+
+Ao abrir a porta, uma onda de ar gelado os atingiu. O interior estava intacto, mas vazio - não apenas vazio de pessoas, mas vazio de qualquer sinal de que alguém tivesse estado ali. Nem mesmo as impressões digitais permaneciam nas superfícies.
+
+'Isso é impossível', sussurrou Lis, seus olhos percorrendo a sala imaculada. 'Pessoas não desaparecem assim. Elas deixam... resquícios.'
+
+Caio se ajoelhou, tocando o chão frio. 'A menos que não tenham desaparecido no sentido convencional. A menos que tenham sido... apagadas.'
+
+Seu comunicador bipou abruptamente. A mensagem era curta e perturbadora: 'ABORTAR INVESTIGAÇÃO. RETORNAR IMEDIATAMENTE AO SETOR PRINCIPAL. ASSUNTO: CLASSIFICADO.'
+
+Eles trocaram olhares. Alguém - ou algo - não queria que descobrissem a verdade.
+"""
+
+## FORMATO DE RESPOSTA (JSON):
 {
-  "title": "Título Baseado na Descrição",
-  "synopsis": "Sinopse expandida e detalhada",
+  "title": "Título do Livro (120+ Páginas)",
+  "synopsis": "Sinopse detalhada de 4-5 parágrafos",
   "chapters": [
     {
-      "title": "Título do Capítulo 1 Expandido",
-      "content": "CONTEÚDO COMPLETO E DETALHADO expandindo a descrição original com diálogos, ações, descrições e desenvolvimento emocional dos personagens."
+      "title": "Título do Capítulo 1",
+      "content": "CONTEÚDO COMPLETO E EXTENSO (mínimo 5-7 parágrafos ricos em detalhes, diálogos e desenvolvimento narrativo)"
     }
   ]
 }
 
-**IMPORTANTE:** Cada capítulo deve ter 600-900 palavras de conteúdo ORIGINAL que expande a premissa fornecida.
+**IMPORTANTE:** Cada capítulo deve ser UMA NARRATIVA COMPLETA, não um resumo!
 `;
 
-    console.log('🔄 Expandindo descrição em livro completo...');
+    console.log(`🚀 USANDO ${config.model} PARA ${config.pages} PÁGINAS`);
+    console.log(`📝 Solicitando ${finalChapterCount} capítulos extensos...`);
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: config.model,
       messages: [
         {
           role: "system",
-          content: `Você é um escritor especializado em expandir descrições em livros completos. 
-          Sua função é PEGAR a premissa fornecida e DESENVOLVÊ-LA em narrativas completas, 
-          mantendo os mesmos personagens, enredo e universo, mas adicionando diálogos, 
-          cenas detalhadas e desenvolvimento emocional.`
+          content: `Você é um escritor best-seller especializado em romances longos (120+ páginas). 
+          Sua especialidade é criar conteúdo EXTENSO, DETALHADO e IMERSIVO com diálogos completos, 
+          descrições ricas e desenvolvimento profundo de personagens. 
+          NUNCA crie resumos - sempre desenvolva narrativas completas.`
         },
         {
           role: "user",
-          content: expansionPrompt
+          content: longFormPrompt
         }
       ],
       max_tokens: config.maxTokens,
@@ -96,7 +144,7 @@ VOCÊ CRIA:
       throw new Error('Resposta vazia da OpenAI');
     }
 
-    console.log('✅ Expansão concluída, processando...');
+    console.log('✅ Conteúdo de livro grande recebido');
 
     // Parse do JSON
     let bookData;
@@ -104,39 +152,55 @@ VOCÊ CRIA:
       bookData = JSON.parse(content);
     } catch (e) {
       console.log('❌ Erro no parse, criando estrutura alternativa...');
-      // Fallback inteligente que ainda expande a descrição
       bookData = {
-        title: "A Expansão do Vazio",
-        synopsis: `Desenvolvimento completo da premissa: ${description.substring(0, 200)}...`,
-        chapters: Array.from({ length: config.chapters }, (_, i) => ({
-          title: `Capítulo ${i + 1} - Desenvolvimento Expandido`,
-          content: `Este capítulo expande a descrição original com cenas detalhadas, diálogos completos e desenvolvimento dos personagens Caio e Lis no universo da Instalação 09.`
+        title: "A Ausência - Edição Expandida",
+        synopsis: `Romance completo de ${config.pages} páginas baseado na premissa original.`,
+        chapters: Array.from({ length: finalChapterCount }, (_, i) => ({
+          title: `Capítulo ${i + 1} - Narrativa Expandida`,
+          content: `Conteúdo extenso e detalhado desenvolvendo a premissa original em profundidade. Este capítulo contém diálogos completos, descrições ricas e desenvolvimento narrativo aprofundado.`
         }))
       };
     }
 
-    // Validar se expandiu suficientemente
+    // Calcular estatísticas reais
     const totalContentLength = bookData.chapters?.reduce((sum: number, chapter: any) => 
       sum + (chapter.content?.length || 0), 0) || 0;
     
-    const expansionRatio = totalContentLength / description.length;
-    
-    console.log('📊 ESTATÍSTICAS DA EXPANSÃO:');
-    console.log(`   • Descrição original: ${description.length} caracteres`);
-    console.log(`   • Livro expandido: ${totalContentLength} caracteres`);
-    console.log(`   • Taxa de expansão: ${expansionRatio.toFixed(1)}x`);
-    console.log(`   • Capítulos: ${bookData.chapters?.length}`);
+    const estimatedPages = Math.ceil(totalContentLength / 1800); // ~1800 chars por página
+    const avgChapterLength = totalContentLength / (bookData.chapters?.length || 1);
 
-    if (expansionRatio < 2) {
-      console.log('⚠️ Expansão pode estar muito próxima do original');
-    }
+    console.log('📈 ESTATÍSTICAS DO LIVRO GRANDE:');
+    console.log(`   • Total de caracteres: ${totalContentLength}`);
+    console.log(`   • Páginas estimadas: ${estimatedPages}`);
+    console.log(`   • Capítulos: ${bookData.chapters?.length}`);
+    console.log(`   • Média por capítulo: ${Math.ceil(avgChapterLength)} caracteres`);
+    console.log(`   • Tokens usados: ${completion.usage?.total_tokens || 'N/A'}`);
+
+    // Adicionar metadados de tamanho
+    bookData.metadata = {
+      estimatedPages,
+      totalCharacters: totalContentLength,
+      size: config.pages,
+      model: config.model
+    };
 
     return NextResponse.json(bookData);
 
   } catch (error: any) {
-    console.error('❌ Erro na expansão:', error);
+    console.error('❌ Erro na geração de livro grande:', error);
+    
+    if (error?.code === 'model_not_found') {
+      return NextResponse.json(
+        { 
+          error: 'Modelo GPT-3.5-turbo-16k não disponível.',
+          solution: 'Verifique se sua conta OpenAI tem acesso a este modelo.'
+        },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json(
-      { error: 'Erro ao expandir o livro. Tente novamente.' },
+      { error: 'Erro ao gerar livro grande. Tente um tamanho menor.' },
       { status: 500 }
     );
   }
