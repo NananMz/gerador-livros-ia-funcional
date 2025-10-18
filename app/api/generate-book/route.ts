@@ -5,275 +5,224 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Sistema para descobrir modelos disponíveis
-const AVAILABLE_MODELS = [
-  "gpt-3.5-turbo",
-  "gpt-3.5-turbo-16k", 
-  "gpt-4",
-  "gpt-4-turbo",
-  "gpt-4-32k"
-];
-
-// Configuração base independente do modelo
+// CONFIGURAÇÃO REALISTA PARA 4096 TOKENS MÁXIMO
 const BOOK_SIZE_CONFIG = {
   pequeno: {
     label: "Pequeno",
-    pages: "20-40 páginas",
+    description: "Conto ou novela curta",
+    pages: "20-30 páginas",
     chapters: 3,
-    wordsPerChapter: "500-800 palavras",
-    readingTime: "1-2 horas"
+    wordsPerChapter: "400-600 palavras",
+    maxTokens: 2000, // SEGURO para 4K
+    readingTime: "30-60 minutos"
   },
   medio: {
     label: "Médio", 
-    pages: "40-70 páginas",
-    chapters: 5,
-    wordsPerChapter: "700-1.000 palavras",
-    readingTime: "2-3 horas"
+    description: "Romance curto",
+    pages: "30-50 páginas",
+    chapters: 4,
+    wordsPerChapter: "500-800 palavras",
+    maxTokens: 3000, // BOM para 4K
+    readingTime: "1-2 horas"
   },
   grande: {
     label: "Grande",
-    pages: "60-90 páginas",
-    chapters: 6,
-    wordsPerChapter: "800-1.200 palavras",
-    readingTime: "3-4 horas"
+    description: "Romance médio",
+    pages: "40-60 páginas",
+    chapters: 5,
+    wordsPerChapter: "600-900 palavras", 
+    maxTokens: 3500, // MÁXIMO SEGURO para 4K
+    readingTime: "2-3 horas"
   }
 };
 
-// Função para descobrir qual modelo está disponível
-async function discoverAvailableModel(): Promise<{model: string, maxTokens: number}> {
-  console.log('🔍 Descobrindo modelos disponíveis...');
+// Função para testar modelo com limite REAL
+async function testModelWithRealLimit(model: string): Promise<{available: boolean, maxTokens: number}> {
+  console.log(`🔍 Testando modelo: ${model}`);
   
-  for (const model of AVAILABLE_MODELS) {
-    try {
-      console.log(`   Testando modelo: ${model}`);
-      
-      const testCompletion = await openai.chat.completions.create({
-        model: model,
-        messages: [{ role: "user", content: "Responda 'OK'" }],
-        max_tokens: 5,
-      });
-      
-      // Determinar max_tokens baseado no modelo
-      let maxTokens = 2000; // padrão conservador
-      
-      if (model.includes('16k') || model.includes('32k')) {
-        maxTokens = 8000;
-      } else if (model.includes('gpt-4')) {
-        maxTokens = 4000;
-      } else if (model.includes('gpt-3.5-turbo')) {
-        maxTokens = 3500; // Máximo seguro para 4K
-      }
-      
-      console.log(`✅ Modelo disponível: ${model} (${maxTokens} tokens)`);
-      return { model, maxTokens };
-      
-    } catch (error: any) {
-      console.log(`❌ ${model} não disponível: ${error.message}`);
-      continue;
-    }
-  }
-  
-  // Se nenhum modelo GPT funcionar, tentar usar davinci como fallback
   try {
-    console.log('🔄 Tentando modelos completion como fallback...');
-    const completion = await openai.completions.create({
-      model: "text-davinci-003",
-      prompt: "Test",
+    // Teste com limite conservador primeiro
+    const testCompletion = await openai.chat.completions.create({
+      model: model,
+      messages: [{ role: "user", content: "Responda 'OK'" }],
       max_tokens: 5,
     });
     
-    console.log('✅ Usando text-davinci-003 como fallback');
-    return { model: "text-davinci-003", maxTokens: 2000 };
+    console.log(`✅ ${model} disponível`);
     
-  } catch (error) {
-    throw new Error('NENHUM modelo da OpenAI está disponível para este projeto');
+    // DEFINIR LIMITE MÁXIMO REAL baseado no modelo
+    let maxTokens;
+    if (model.includes('16k') || model.includes('32k')) {
+      maxTokens = 4096; // SEU PROJETO SÓ PERMITE 4K MESMO EM MODELOS 16K!
+    } else if (model.includes('gpt-4')) {
+      maxTokens = 4096; // GPT-4 também tem limite de 4K no seu projeto
+    } else {
+      maxTokens = 4096; // MÁXIMO ABSOLUTO para seu projeto
+    }
+    
+    // Limitar ainda mais para segurança
+    const safeMaxTokens = Math.min(maxTokens, 3500);
+    
+    console.log(`   • Limite real: ${maxTokens} tokens`);
+    console.log(`   • Limite seguro: ${safeMaxTokens} tokens`);
+    
+    return { available: true, maxTokens: safeMaxTokens };
+    
+  } catch (error: any) {
+    console.log(`❌ ${model} não disponível: ${error.message}`);
+    return { available: false, maxTokens: 0 };
   }
 }
 
-// Função para gerar livro com o modelo disponível
-async function generateWithAvailableModel(prompt: string, model: string, maxTokens: number) {
-  console.log(`🚀 Gerando com ${model} (${maxTokens} tokens)...`);
+// Função para descobrir modelo funcionando
+async function findWorkingModel(): Promise<{model: string, maxTokens: number}> {
+  console.log('🚀 Procurando modelo funcionando...');
   
-  if (model.startsWith('text-')) {
-    // Para modelos de completion (antigos)
-    const completion = await openai.completions.create({
-      model: model,
-      prompt: prompt,
-      max_tokens: maxTokens,
-      temperature: 0.7,
-    });
+  const modelsToTry = [
+    "gpt-3.5-turbo",
+    "gpt-3.5-turbo-16k", 
+    "gpt-4",
+    "gpt-4-turbo"
+  ];
+  
+  for (const model of modelsToTry) {
+    const result = await testModelWithRealLimit(model);
+    if (result.available) {
+      return { model, maxTokens: result.maxTokens };
+    }
+  }
+  
+  throw new Error('Nenhum modelo GPT está disponível. Verifique as permissões do projeto.');
+}
+
+export async function POST(request: NextRequest) {
+  console.log('🎯 INICIANDO GERAÇÃO COM LIMITE REAL DE 4K TOKENS');
+  
+  try {
+    const { description, size, genre, audience, chapterCount } = await request.json();
     
-    return completion.choices[0]?.text || '';
-  } else {
-    // Para modelos chat
+    // Encontrar modelo que funciona
+    const { model, maxTokens } = await findWorkingModel();
+    
+    console.log(`✅ MODELO SELECIONADO: ${model}`);
+    console.log(`🔐 LIMITE MÁXIMO: ${maxTokens} tokens`);
+    
+    const config = BOOK_SIZE_CONFIG[size as keyof typeof BOOK_SIZE_CONFIG] || BOOK_SIZE_CONFIG.medio;
+    const finalChapterCount = Math.min(chapterCount || config.chapters, 5);
+    
+    console.log(`📊 CONFIG: ${config.pages} | ${finalChapterCount} capítulos | ${maxTokens} tokens`);
+    
+    // Prompt ULTRA OTIMIZADO para 4K tokens
+    const ultraOptimizedPrompt = `
+CRIE UM LIVRO baseado nesta descrição:
+"${description.substring(0, 800)}"
+
+CONFIGURAÇÃO:
+- Capítulos: ${finalChapterCount}
+- Gênero: ${genre || "Ficção"}
+- Público: ${audience || "Adulto"}
+
+INSTRUÇÕES (SEJA CONCISO MAS DETALHADO):
+- Cada capítulo: 2-3 parágrafos substanciais
+- Inclua diálogos breves mas significativos
+- Desenvolva a trama progressivamente
+- Mantenha coerência com a premissa
+
+FORMATO (APENAS JSON):
+{
+  "title": "Título",
+  "synopsis": "Sinopse curta de 1-2 parágrafos",
+  "chapters": [
+    {
+      "title": "Título Capítulo 1", 
+      "content": "Conteúdo com 2-3 parágrafos ricos em detalhes..."
+    }
+  ]
+}
+
+IMPORTANTE: Otimize o uso de tokens! Seja detalhado mas eficiente.
+`;
+
+    console.log('📝 Gerando livro otimizado...');
+    
     const completion = await openai.chat.completions.create({
       model: model,
       messages: [
         {
           role: "system",
-          content: "Você é um escritor profissional. Responda APENAS com JSON válido."
+          content: "Você é um escritor que cria conteúdo rico dentro de limites rigorosos de tokens. Seja detalhado mas conciso."
         },
         {
           role: "user",
-          content: prompt
+          content: ultraOptimizedPrompt
         }
       ],
       max_tokens: maxTokens,
       temperature: 0.7,
     });
-    
-    return completion.choices[0]?.message?.content || '';
-  }
-}
 
-export async function POST(request: NextRequest) {
-  console.log('🚀 INICIANDO GERAÇÃO COM MODELO AUTODETECTADO');
-  
-  try {
-    const { description, size, genre, audience, chapterCount } = await request.json();
-    
-    // Descobrir modelo disponível
-    const { model, maxTokens } = await discoverAvailableModel();
-    
-    console.log(`🎯 MODELO SELECIONADO: ${model}`);
-    console.log(`   • Tokens disponíveis: ${maxTokens}`);
-    console.log(`   • Tamanho solicitado: ${size}`);
-    
-    const config = BOOK_SIZE_CONFIG[size as keyof typeof BOOK_SIZE_CONFIG] || BOOK_SIZE_CONFIG.medio;
-    const finalChapterCount = Math.min(chapterCount || config.chapters, 6);
-    
-    // Ajustar configuração baseado nos tokens disponíveis
-    let adjustedConfig = { ...config };
-    if (maxTokens < 3000) {
-      // Tokens muito limitados
-      adjustedConfig.chapters = Math.min(config.chapters, 4);
-      adjustedConfig.wordsPerChapter = "400-600 palavras";
-      adjustedConfig.pages = `~${parseInt(config.pages.split('-')[0]) / 2} páginas`;
-    }
-    
-    console.log(`📊 CONFIGURAÇÃO AJUSTADA: ${adjustedConfig.pages} | ${finalChapterCount} capítulos`);
-    
-    // Prompt otimizado para o modelo disponível
-    const optimizedPrompt = model.startsWith('text-') 
-      ? // Prompt para modelos de completion
-        `Crie um livro baseado em: "${description.substring(0, 1000)}"
-        
-        Gênero: ${genre}
-        Capítulos: ${finalChapterCount}
-        
-        Estruture em JSON:
-        {
-          "title": "Título",
-          "synopsis": "Sinopse", 
-          "chapters": [
-            {"title": "Capítulo 1", "content": "Texto"}
-          ]
-        }`
-      : // Prompt para modelos chat
-        `Crie um livro completo baseado nesta descrição: "${description.substring(0, 1500)}"
-        
-        ESPECIFICAÇÕES:
-        - Gênero: ${genre || "Ficção"}
-        - Capítulos: ${finalChapterCount}
-        - Público: ${audience || "Adulto"}
-        
-        Desenvolva cada capítulo com:
-        - Diálogos realistas
-        - Descrições detalhadas  
-        - Progressão narrativa
-        - Desenvolvimento de personagens
-        
-        FORMATO DE RESPOSTA (APENAS JSON):
-        {
-          "title": "Título do Livro",
-          "synopsis": "Sinopse completa aqui",
-          "chapters": [
-            {
-              "title": "Título do Capítulo 1",
-              "content": "Conteúdo completo e detalhado do capítulo 1..."
-            }
-          ]
-        }`;
-
-    console.log('📝 Gerando conteúdo...');
-    
-    const content = await generateWithAvailableModel(optimizedPrompt, model, maxTokens);
+    const content = completion.choices[0]?.message?.content;
     
     if (!content) {
       throw new Error('Resposta vazia da OpenAI');
     }
-    
-    console.log('✅ Conteúdo recebido, processando...');
+
+    console.log('✅ Conteúdo recebido');
     
     // Processar resposta
     let bookData;
     try {
       bookData = JSON.parse(content);
     } catch (e) {
-      console.log('❌ Erro no parse JSON, criando estrutura manual...');
-      
-      // Se não é JSON válido, criar estrutura básica
-      const chapters = [];
-      for (let i = 0; i < finalChapterCount; i++) {
-        chapters.push({
-          title: `Capítulo ${i + 1}`,
-          content: `Conteúdo do capítulo ${i + 1} baseado na descrição: ${description.substring(0, 100)}...`
-        });
-      }
-      
+      console.log('⚠️ Criando estrutura fallback...');
       bookData = {
         title: "Livro Gerado",
-        synopsis: `Baseado na premissa: ${description.substring(0, 200)}...`,
-        chapters: chapters
+        synopsis: `Baseado na premissa: ${description.substring(0, 100)}...`,
+        chapters: Array.from({ length: finalChapterCount }, (_, i) => ({
+          title: `Capítulo ${i + 1}`,
+          content: `Desenvolvimento da narrativa no capítulo ${i + 1}. ${description.substring(0, 80)}...`
+        }))
       };
     }
-    
+
     // Estatísticas
     const totalContentLength = bookData.chapters?.reduce((sum: number, chapter: any) => 
       sum + (chapter.content?.length || 0), 0) || 0;
-    
-    console.log('📈 ESTATÍSTICAS:');
-    console.log(`   • Modelo usado: ${model}`);
+
+    console.log('📈 ESTATÍSTICAS FINAIS:');
+    console.log(`   • Modelo: ${model}`);
+    console.log(`   • Tokens usados: ${completion.usage?.total_tokens}`);
     console.log(`   • Capítulos: ${bookData.chapters?.length}`);
     console.log(`   • Caracteres: ${totalContentLength}`);
-    console.log(`   • Páginas estimadas: ~${Math.ceil(totalContentLength / 1800)}`);
-    
-    // Metadados
-    bookData.metadata = {
-      model: model,
-      maxTokens: maxTokens,
-      size: adjustedConfig.label,
-      estimatedPages: Math.ceil(totalContentLength / 1800),
-      generation: "auto-detected-model"
-    };
-    
+    console.log(`   • Páginas: ~${Math.ceil(totalContentLength / 1500)}`);
+
     return NextResponse.json(bookData);
-    
+
   } catch (error: any) {
-    console.error('💥 ERRO CRÍTICO:', error.message);
+    console.error('💥 ERRO:', error.message);
     
-    if (error.message.includes('NENHUM modelo')) {
+    if (error?.status === 400 && error?.message?.includes('max_tokens')) {
       return NextResponse.json(
         { 
-          error: 'Projeto sem acesso a modelos GPT',
-          solution: 'Verifique as permissões do projeto na OpenAI ou use uma API Key diferente'
+          error: 'Limite de tokens excedido.',
+          solution: 'Seu projeto OpenAI tem limite máximo de 4096 tokens. Use tamanhos "Pequeno" ou "Médio".'
+        },
+        { status: 400 }
+      );
+    }
+    
+    if (error?.status === 403) {
+      return NextResponse.json(
+        { 
+          error: 'Acesso negado aos modelos GPT.',
+          solution: 'Seu projeto está restrito. Crie uma nova API Key ou verifique permissões.'
         },
         { status: 403 }
       );
     }
-    
-    if (error?.status === 429) {
-      return NextResponse.json(
-        { error: 'Limite de requisições excedido' },
-        { status: 429 }
-      );
-    }
-    
+
     return NextResponse.json(
-      { 
-        error: 'Erro na geração',
-        details: error.message
-      },
+      { error: 'Erro na geração. Tente tamanho "Pequeno".' },
       { status: 500 }
     );
   }
